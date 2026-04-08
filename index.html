@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Emotion-Based Study Assistant</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Courier New', monospace; background: #0d1117; color: #c9d1d9; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+    .container { max-width: 720px; padding: 40px; }
+    h1 { color: #58a6ff; font-size: 1.8rem; margin-bottom: 8px; }
+    h2 { color: #8b949e; font-size: 1rem; font-weight: normal; margin-bottom: 32px; }
+    .section { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 20px; margin-bottom: 16px; }
+    .section h3 { color: #58a6ff; margin-bottom: 12px; font-size: 0.95rem; }
+    code { background: #1f2937; padding: 2px 6px; border-radius: 4px; font-size: 0.85rem; color: #f0883e; }
+    pre { background: #1f2937; padding: 12px; border-radius: 6px; overflow-x: auto; margin-top: 8px; font-size: 0.8rem; color: #7ee787; }
+    ul { list-style: none; padding: 0; }
+    ul li { padding: 4px 0; }
+    ul li::before { content: "→ "; color: #58a6ff; }
+    .badge { display: inline-block; background: #238636; color: #fff; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; margin-left: 8px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🎓 Emotion-Based Study Assistant</h1>
+    <h2>C++ &amp; OpenCV Project — Runs locally on your laptop webcam</h2>
+
+    <div class="section">
+      <h3>📁 Project Files</h3>
+      <ul>
+        <li><code>main.cpp</code> — Main program loop</li>
+        <li><code>face_detection.h/.cpp</code> — Haar Cascade face detection</li>
+        <li><code>emotion_simulator.h/.cpp</code> — Random emotion simulation</li>
+        <li><code>decision_engine.h/.cpp</code> — Study suggestions + modes</li>
+        <li><code>productivity_tracker.h/.cpp</code> — Score, timer, logging</li>
+      </ul>
+    </div>
+
+    <div class="section">
+      <h3>⚡ How to Run</h3>
+      <p>1. Clone this repo to your laptop</p>
+      <p>2. Install OpenCV (<code>brew install opencv</code> / <code>sudo apt install libopencv-dev</code>)</p>
+      <p>3. Copy <code>haarcascade_frontalface_default.xml</code> into the folder</p>
+      <p>4. Compile &amp; run:</p>
+      <pre>g++ main.cpp face_detection.cpp emotion_simulator.cpp decision_engine.cpp productivity_tracker.cpp -o app `pkg-config --cflags --libs opencv4`
+./app</pre>
+    </div>
+
+    <div class="section">
+      <h3>🎮 Controls</h3>
+      <ul>
+        <li><code>q</code> — Quit &amp; show session summary</li>
+        <li><code>m</code> — Toggle Strict / Relaxed mode</li>
+      </ul>
+    </div>
+
+    <div class="section">
+      <h3>✨ Features</h3>
+      <ul>
+        <li>Webcam face detection with rectangle overlay</li>
+        <li>Simulated emotions: Happy, Sad, Angry, Neutral, Sleepy</li>
+        <li>Productivity score <span class="badge">OOP</span></li>
+        <li>Auto study timer + log.txt logging</li>
+        <li>Console BEEP alerts + session summary</li>
+      </ul>
+    </div>
+
+    <p style="margin-top:24px;color:#8b949e;font-size:0.85rem;">⚠️ This is a native C++ application. Download the repo and run it locally with your webcam.</p>
+  </div>
+</body>
+</html>
