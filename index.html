@@ -101,6 +101,8 @@
     .team-name { font-size:.9rem; font-weight:600; }
     .team-role { font-size:.7rem; color:var(--dim); margin-top:2px; }
 
+    .song-countdown { font-size:.7rem; color:var(--dim); margin-top:8px; font-family:'JetBrains Mono',monospace; }
+    .song-countdown span { color:var(--accent); font-weight:700; }
     .footer { text-align:center; padding:28px 20px; color:var(--dim); font-size:.75rem; border-top:1px solid var(--border); margin-top:40px; }
 
     @media(max-width:768px) {
@@ -201,6 +203,7 @@
       <div class="song-title">🎵 You look stressed! Here's a song to cheer you up</div>
       <div class="song-name" id="songPopupName"></div>
       <a class="song-link" id="songPopupLink" href="#" target="_blank" rel="noopener">▶ Play on YouTube</a>
+      <div class="song-countdown" id="songCountdown">Disappears in <span id="countSec">10</span>s</div>
     </div>
 
     <div class="modal-bg" id="summaryModal">
@@ -545,14 +548,22 @@
        SONG RECOMMENDATION
        ========================================== */
     var songTimer = null;
+    var songCountInterval = null;
+    var songSecsLeft = 0;
+
+    function hideSongPopups() {
+      document.getElementById('songBox').style.display = 'none';
+      document.getElementById('songPopup').style.display = 'none';
+    }
+
+    function clearSongTimers() {
+      if (songTimer) { clearTimeout(songTimer); songTimer = null; }
+      if (songCountInterval) { clearInterval(songCountInterval); songCountInterval = null; }
+    }
 
     function recommendSong(emotion) {
       if (emotion !== 'Sad' && emotion !== 'Angry') {
         // Don't hide if timer is still active (10s window)
-        if (!songTimer) {
-          document.getElementById('songBox').style.display = 'none';
-          document.getElementById('songPopup').style.display = 'none';
-        }
         return;
       }
 
@@ -568,16 +579,25 @@
       document.getElementById('songLink').href = pick.url;
       document.getElementById('songBox').style.display = 'block';
 
-      // Update popup below video (always visible)
+      // Update popup below video
       document.getElementById('songPopupName').textContent = pick.name;
       document.getElementById('songPopupLink').href = pick.url;
       document.getElementById('songPopup').style.display = 'block';
 
-      // Keep visible for 10 seconds
+      // Countdown
+      songSecsLeft = 10;
+      document.getElementById('countSec').textContent = songSecsLeft;
+
+      songCountInterval = setInterval(function() {
+        songSecsLeft--;
+        if (songSecsLeft < 0) songSecsLeft = 0;
+        document.getElementById('countSec').textContent = songSecsLeft;
+      }, 1000);
+
+      // Hide after 10 seconds
       songTimer = setTimeout(function() {
-        songTimer = null;
-        document.getElementById('songBox').style.display = 'none';
-        document.getElementById('songPopup').style.display = 'none';
+        clearSongTimers();
+        hideSongPopups();
       }, 10000);
     }
 
@@ -667,11 +687,7 @@
               }
             }
 
-            // Hide song box if emotion is now positive
-            if (curEmo === 'Happy' || curEmo === 'Neutral') {
-              document.getElementById('songBox').style.display = 'none';
-              document.getElementById('songPopup').style.display = 'none';
-            }
+            // Song hiding is handled by the 10s timer in recommendSong()
 
             // Confidence text
             var conf = Math.round(topVal * 100);
@@ -686,8 +702,7 @@
             document.getElementById('warnBox').style.display = 'block';
             document.getElementById('emoDisp').textContent = '—';
             document.getElementById('confDisp').textContent = 'No face detected';
-            document.getElementById('songBox').style.display = 'none';
-            document.getElementById('songPopup').style.display = 'none';
+            // Song hiding is handled by the 10s timer in recommendSong()
             lowStreak++;
           }
         } catch(e) {}
