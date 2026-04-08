@@ -563,27 +563,43 @@
               <p style="font-size:0.8rem;margin-top:8px;">Your webcam feed stays in your browser — nothing is uploaded.</p>
             </div>
             <div class="warning-overlay" id="warningOverlay">⚠ WARNING: User not present!</div>
+            <!-- BEEP alert overlay -->
+            <div id="beepOverlay" style="position:absolute;top:12px;right:12px;background:rgba(248,113,113,0.9);color:#fff;padding:8px 16px;border-radius:8px;font-weight:700;font-family:'JetBrains Mono',monospace;font-size:0.85rem;display:none;z-index:10;">🔔 BEEP!</div>
           </div>
           <div class="demo-sidebar">
             <div class="stat-card">
               <div class="stat-label">Detected Emotion</div>
               <div class="stat-value emotion" id="emotionDisplay">—</div>
+              <div style="font-size:0.7rem;color:var(--text-secondary);margin-top:4px;" id="confidenceDisplay"></div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+              <div class="stat-card">
+                <div class="stat-label">Focused</div>
+                <div class="stat-value score" id="focusedDisplay" style="font-size:1.1rem;">0</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-label">Distracted</div>
+                <div class="stat-value" id="distractedDisplay" style="font-size:1.1rem;color:var(--red);">0</div>
+              </div>
             </div>
             <div class="stat-card">
               <div class="stat-label">Productivity Score</div>
               <div class="stat-value score" id="scoreDisplay">0.0%</div>
             </div>
-            <div class="stat-card">
-              <div class="stat-label">Study Time</div>
-              <div class="stat-value time" id="timeDisplay">0s</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-label">Mode</div>
-              <div class="stat-value mode" id="modeDisplay">Relaxed</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+              <div class="stat-card">
+                <div class="stat-label">Study Time</div>
+                <div class="stat-value time" id="timeDisplay" style="font-size:1.1rem;">0s</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-label">Mode</div>
+                <div class="stat-value mode" id="modeDisplay" style="font-size:1.1rem;">Relaxed</div>
+              </div>
             </div>
             <div class="suggestion-box">
               <div class="stat-label">💡 Study Suggestion</div>
               <div class="suggestion-text" id="suggestionDisplay">Start the camera to get tips!</div>
+              <div class="stat-label" style="margin-top:12px;">📋 Emotion Log</div>
               <ul class="emotion-log" id="emotionLog"></ul>
             </div>
           </div>
@@ -591,8 +607,18 @@
       </div>
     </div>
 
+    <!-- Session Summary Modal -->
+    <div id="summaryModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:1000;display:none;align-items:center;justify-content:center;">
+      <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:16px;padding:32px;max-width:420px;width:90%;text-align:center;">
+        <h2 style="color:var(--accent);margin-bottom:4px;">📊 Session Summary</h2>
+        <p style="color:var(--text-secondary);font-size:0.85rem;margin-bottom:20px;">Here's how your study session went</p>
+        <div id="summaryContent" style="text-align:left;"></div>
+        <button class="btn btn-primary" onclick="closeSummary()" style="margin-top:20px;width:100%;">Close</button>
+      </div>
+    </div>
+
     <div class="footer">
-      Built with C++ &bull; OpenCV &bull; Haar Cascade &bull; Web demo powered by browser APIs<br/>
+      Built with C++ &bull; OpenCV &bull; Haar Cascade &bull; Web demo uses face-api.js<br/>
       <span style="font-size:0.75rem;">Webcam feed is processed locally in your browser — no data leaves your device.</span>
     </div>
   </div>
@@ -601,63 +627,50 @@
   <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
 
   <script>
-    // ========== State ==========
+    // ========================================
+    // STATE VARIABLES
+    // ========================================
     let stream = null;
     let running = false;
-    let mode = 'Relaxed';
-    let score = 0;
-    let faceFrames = 0;
-    let totalFrames = 0;
-    let studySeconds = 0;        // only counts seconds when face is present
-    let studyStartTime = null;
+    let mode = 'Relaxed';          // Strict or Relaxed
+    let studySeconds = 0;          // Only counts when face is present
     let timerInterval = null;
     let currentEmotion = 'Neutral';
     let faceDetected = false;
     let modelsLoaded = false;
 
-    // Map face-api expressions to our 5 emotions
-    function mapExpression(expressions) {
-      // expressions is an object like { happy: 0.9, sad: 0.01, angry: 0.02, ... }
-      const map = {
-        happy: 'Happy',
-        sad: 'Sad',
-        angry: 'Angry',
-        neutral: 'Neutral',
-        surprised: 'Happy',     // map surprised → Happy
-        fearful: 'Sad',         // map fearful → Sad
-        disgusted: 'Angry'      // map disgusted → Angry
-      };
+    // Productivity tracking (mirrors C++ ProductivityTracker)
+    let focusedCount = 0;          // Happy + Neutral readings
+    let distractedCount = 0;       // Sad + Angry + Sleepy readings
+    let totalReadings = 0;
 
-      // Find the expression with highest confidence
-      let maxExpr = 'neutral';
-      let maxVal = 0;
-      for (const [expr, val] of Object.entries(expressions)) {
-        if (val > maxVal) {
-          maxVal = val;
-          maxExpr = expr;
-        }
-      }
+    // Emotion log for session summary
+    let emotionHistory = [];
 
-      return map[maxExpr] || 'Neutral';
-    }
+    // Sleepy detection: track low-expression-confidence frames
+    let lowConfidenceStreak = 0;
 
+    // ========================================
+    // SUGGESTIONS (mirrors C++ DecisionEngine)
+    // ========================================
     const suggestionsRelaxed = {
-      Happy: "Great mood! Keep studying, you're doing well! 😊",
-      Sad: "Take a 5 minute break, listen to some music 🎵",
-      Angry: "Try a quick breathing exercise — inhale 4s, hold 4s, exhale 4s 🧘",
-      Neutral: "You're focused — keep going, you're on track! 📚",
-      Sleepy: "Time for a coffee break or a short walk ☕"
+      Happy:   "Continue studying! You're doing great! 😊",
+      Sad:     "Take a short break, you'll feel better 🎵",
+      Angry:   "Relax and calm down, then continue 🧘",
+      Neutral: "Keep going, you're on track! 📚",
+      Sleepy:  "Take some rest, sleep is important ☕"
     };
-
     const suggestionsStrict = {
-      Happy: "Channel that energy — tackle the hardest topic now! 💪",
-      Sad: "Push through it! Only 10 more minutes then break 🔥",
-      Angry: "Use that intensity — power through practice problems! ⚡",
+      Happy:   "Channel that energy — tackle the hardest topic now! 💪",
+      Sad:     "WARNING: You look sad! Take a break NOW! 🔥",
+      Angry:   "ALERT: You look angry! Stop and calm down immediately! ⚡",
       Neutral: "Stay locked in. No distractions allowed! 🎯",
-      Sleepy: "Stand up! Splash water on your face and continue! 🚿"
+      Sleepy:  "DANGER: You are sleepy! Take rest RIGHT NOW! 🚿"
     };
 
-    // ========== Load face-api models ==========
+    // ========================================
+    // LOAD FACE-API MODELS
+    // ========================================
     async function loadModels() {
       const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/model/';
       document.getElementById('loadingStatus').textContent = '(Loading AI models...)';
@@ -665,34 +678,33 @@
       try {
         await Promise.all([
           faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
-          faceapi.nets.faceExpressionNet.loadFromUri(MODEL_URL)
+          faceapi.nets.faceExpressionNet.loadFromUri(MODEL_URL),
+          faceapi.nets.faceLandmark68TinyNet.loadFromUri(MODEL_URL)
         ]);
         modelsLoaded = true;
         document.getElementById('loadingStatus').textContent = '(Models ready ✓)';
-        setTimeout(() => {
-          document.getElementById('loadingStatus').textContent = '';
-        }, 2000);
+        setTimeout(() => { document.getElementById('loadingStatus').textContent = ''; }, 2000);
       } catch (err) {
-        document.getElementById('loadingStatus').textContent = '(Model load failed — using fallback)';
+        document.getElementById('loadingStatus').textContent = '(Model load failed)';
         modelsLoaded = false;
       }
     }
 
-    // ========== Camera ==========
+    // ========================================
+    // START CAMERA
+    // ========================================
     async function startCamera() {
       const btn = document.getElementById('btnStart');
       btn.textContent = '⏳ Loading...';
       btn.disabled = true;
 
-      // Load models if not loaded yet
-      if (!modelsLoaded) {
-        await loadModels();
-      }
+      if (!modelsLoaded) await loadModels();
 
       try {
         stream = await navigator.mediaDevices.getUserMedia({
           video: { width: 640, height: 480, facingMode: 'user' }
         });
+
         const video = document.getElementById('webcam');
         video.srcObject = stream;
         video.style.display = 'block';
@@ -703,14 +715,24 @@
         document.getElementById('btnStop').style.display = 'inline-block';
         document.getElementById('liveDot').classList.add('active');
 
+        // Reset all tracking state
         running = true;
         studySeconds = 0;
-        totalFrames = 0;
-        faceFrames = 0;
-        score = 0;
+        focusedCount = 0;
+        distractedCount = 0;
+        totalReadings = 0;
         faceDetected = false;
+        lowConfidenceStreak = 0;
+        emotionHistory = [];
+        currentEmotion = 'Neutral';
+        document.getElementById('emotionLog').innerHTML = '';
+        document.getElementById('emotionDisplay').textContent = '—';
+        document.getElementById('scoreDisplay').textContent = '0.0%';
+        document.getElementById('timeDisplay').textContent = '0s';
+        document.getElementById('focusedDisplay').textContent = '0';
+        document.getElementById('distractedDisplay').textContent = '0';
+        document.getElementById('confidenceDisplay').textContent = '';
 
-        // Start detection loop once video metadata loads
         video.onloadedmetadata = () => {
           const canvas = document.getElementById('overlay');
           canvas.width = video.videoWidth;
@@ -718,7 +740,7 @@
           detectLoop();
         };
 
-        // Timer: only increments studySeconds when face is detected
+        // Timer: only counts seconds when face IS detected
         timerInterval = setInterval(() => {
           if (!running) return;
           if (faceDetected) {
@@ -737,8 +759,13 @@
       }
     }
 
+    // ========================================
+    // STOP CAMERA + SHOW SESSION SUMMARY
+    // ========================================
     function stopCamera() {
+      if (!running) return;
       running = false;
+
       if (stream) {
         stream.getTracks().forEach(t => t.stop());
         stream = null;
@@ -753,105 +780,252 @@
       document.getElementById('btnStop').style.display = 'none';
       document.getElementById('liveDot').classList.remove('active');
       document.getElementById('warningOverlay').style.display = 'none';
+      document.getElementById('beepOverlay').style.display = 'none';
 
       const canvas = document.getElementById('overlay');
       const ctx = canvas.getContext('2d');
       ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Show session summary (mirrors C++ printSummary)
+      showSessionSummary();
     }
 
-    // ========== Main Detection Loop ==========
+    function showSessionSummary() {
+      if (totalReadings === 0 && studySeconds === 0) return;
+
+      const productivityScore = totalReadings > 0
+        ? ((focusedCount / totalReadings) * 100).toFixed(1)
+        : '0.0';
+
+      const mins = Math.floor(studySeconds / 60);
+      const secs = studySeconds % 60;
+      const timeStr = mins > 0 ? mins + 'm ' + secs + 's' : secs + 's';
+
+      const content = document.getElementById('summaryContent');
+      content.innerHTML = `
+        <div style="background:var(--bg-code);border-radius:10px;padding:16px;font-family:'JetBrains Mono',monospace;font-size:0.8rem;line-height:2;">
+          <div style="color:var(--text-secondary);border-bottom:1px solid var(--border);padding-bottom:8px;margin-bottom:8px;">========= SESSION SUMMARY =========</div>
+          <div>Focused count <span style="color:var(--text-secondary)">(Happy/Neutral)</span>: <span style="color:var(--green);font-weight:700">${focusedCount}</span></div>
+          <div>Distracted count <span style="color:var(--text-secondary)">(Sad/Angry/Sleepy)</span>: <span style="color:var(--red);font-weight:700">${distractedCount}</span></div>
+          <div>Total readings: <span style="color:var(--accent)">${totalReadings}</span></div>
+          <div>Productivity Score: <span style="color:var(--green);font-weight:700">${productivityScore}%</span></div>
+          <div>Total Study Time: <span style="color:var(--accent);font-weight:700">${timeStr}</span></div>
+          <div style="color:var(--text-secondary);border-top:1px solid var(--border);padding-top:8px;margin-top:8px;">==================================</div>
+        </div>
+      `;
+
+      const modal = document.getElementById('summaryModal');
+      modal.style.display = 'flex';
+
+      // Also log to console (like C++ version)
+      console.log('========================================');
+      console.log('       SESSION SUMMARY');
+      console.log('========================================');
+      console.log('Focused count (Happy/Neutral):', focusedCount);
+      console.log('Distracted count (Sad/Angry/Sleepy):', distractedCount);
+      console.log('Total readings:', totalReadings);
+      console.log('Productivity Score:', productivityScore + '%');
+      console.log('Total Study Time:', timeStr);
+      console.log('========================================');
+    }
+
+    function closeSummary() {
+      document.getElementById('summaryModal').style.display = 'none';
+    }
+
+    // ========================================
+    // MAIN DETECTION LOOP (face-api.js)
+    // ========================================
     async function detectLoop() {
       if (!running) return;
 
       const video = document.getElementById('webcam');
       const canvas = document.getElementById('overlay');
       const ctx = canvas.getContext('2d');
-
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
       if (modelsLoaded && video.readyState >= 2) {
         try {
-          // Detect face + expressions using face-api.js
+          // Use lower threshold (0.3) so it detects face even when
+          // looking slightly down at notebook or at an angle
           const detections = await faceapi
-            .detectAllFaces(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.4 }))
+            .detectAllFaces(video, new faceapi.TinyFaceDetectorOptions({
+              inputSize: 320,
+              scoreThreshold: 0.3
+            }))
+            .withFaceLandmarks(true)
             .withFaceExpressions();
-
-          totalFrames++;
 
           if (detections.length > 0) {
             faceDetected = true;
-            faceFrames++;
+            lowConfidenceStreak = 0;
             document.getElementById('warningOverlay').style.display = 'none';
 
-            // Get the largest face
             const det = detections[0];
             const box = det.detection.box;
 
-            // Mirror the x coordinate since video is flipped
+            // Mirror x coordinate (video is CSS-flipped)
             const mirroredX = canvas.width - box.x - box.width;
 
-            // Draw green rectangle around detected face
+            // Draw green rectangle around face
             ctx.strokeStyle = '#4ade80';
             ctx.lineWidth = 3;
             ctx.strokeRect(mirroredX, box.y, box.width, box.height);
 
-            // Get real emotion from expressions
-            const newEmotion = mapExpression(det.expressions);
+            // ---- Determine emotion from expressions ----
+            const expr = det.expressions;
 
-            if (newEmotion !== currentEmotion) {
-              currentEmotion = newEmotion;
-              document.getElementById('emotionDisplay').textContent = currentEmotion;
+            // Check for "Sleepy" using landmarks: 
+            // If eyes are partially closed OR max expression confidence is very low
+            let detectedEmotion = 'Neutral';
+            let maxExpr = 'neutral';
+            let maxVal = 0;
 
-              const suggestions = mode === 'Strict' ? suggestionsStrict : suggestionsRelaxed;
-              document.getElementById('suggestionDisplay').textContent = suggestions[currentEmotion] || suggestions['Neutral'];
-
-              // Add to emotion log
-              const log = document.getElementById('emotionLog');
-              const li = document.createElement('li');
-              li.textContent = new Date().toLocaleTimeString() + ' → ' + currentEmotion;
-              log.insertBefore(li, log.firstChild);
-              if (log.children.length > 20) log.removeChild(log.lastChild);
+            for (const [name, val] of Object.entries(expr)) {
+              if (val > maxVal) {
+                maxVal = val;
+                maxExpr = name;
+              }
             }
 
-            // Show emotion + confidence on canvas
-            const confidence = Math.round(det.expressions[Object.keys(det.expressions).reduce((a, b) => det.expressions[a] > det.expressions[b] ? a : b)] * 100);
+            // Map face-api expressions to our 5 emotions
+            const expressionMap = {
+              happy: 'Happy',
+              sad: 'Sad',
+              angry: 'Angry',
+              neutral: 'Neutral',
+              surprised: 'Happy',
+              fearful: 'Sad',
+              disgusted: 'Angry'
+            };
+
+            detectedEmotion = expressionMap[maxExpr] || 'Neutral';
+
+            // Sleepy detection: if all expression confidences are low,
+            // or if the detected expression keeps being neutral with low confidence
+            // (indicates drowsy/unfocused face)
+            if (maxVal < 0.4 && maxExpr === 'neutral') {
+              lowConfidenceStreak++;
+              if (lowConfidenceStreak > 5) {
+                detectedEmotion = 'Sleepy';
+              }
+            } else {
+              if (lowConfidenceStreak > 0) lowConfidenceStreak = Math.max(0, lowConfidenceStreak - 2);
+            }
+
+            // Only update when emotion changes
+            if (detectedEmotion !== currentEmotion) {
+              currentEmotion = detectedEmotion;
+              totalReadings++;
+
+              // Focused vs Distracted (mirrors C++ logic)
+              if (currentEmotion === 'Happy' || currentEmotion === 'Neutral') {
+                focusedCount++;
+              } else {
+                distractedCount++;
+              }
+
+              // Update UI
+              document.getElementById('emotionDisplay').textContent = currentEmotion;
+              document.getElementById('focusedDisplay').textContent = focusedCount;
+              document.getElementById('distractedDisplay').textContent = distractedCount;
+
+              const suggestions = mode === 'Strict' ? suggestionsStrict : suggestionsRelaxed;
+              document.getElementById('suggestionDisplay').textContent = suggestions[currentEmotion];
+
+              // BEEP alert for Sleepy or Angry (mirrors C++ BEEP)
+              if (currentEmotion === 'Sleepy' || currentEmotion === 'Angry') {
+                triggerBeep(currentEmotion);
+              }
+
+              // Log emotion (mirrors C++ logEmotion to log.txt)
+              const now = new Date();
+              const timeStr = now.toLocaleTimeString();
+              emotionHistory.push({ time: timeStr, emotion: currentEmotion });
+
+              const log = document.getElementById('emotionLog');
+              const li = document.createElement('li');
+              li.textContent = timeStr + ' → ' + currentEmotion;
+              log.insertBefore(li, log.firstChild);
+              if (log.children.length > 30) log.removeChild(log.lastChild);
+
+              // Update productivity score
+              if (totalReadings > 0) {
+                const score = (focusedCount / totalReadings) * 100;
+                document.getElementById('scoreDisplay').textContent = score.toFixed(1) + '%';
+              }
+            }
+
+            // Show confidence on canvas
+            const confidencePercent = Math.round(maxVal * 100);
+            document.getElementById('confidenceDisplay').textContent =
+              maxExpr + ' confidence: ' + confidencePercent + '%';
+
             ctx.fillStyle = '#fbbf24';
             ctx.font = 'bold 16px JetBrains Mono, monospace';
-            ctx.fillText(currentEmotion + ' (' + confidence + '%)', mirroredX, box.y - 8);
+            ctx.fillText(currentEmotion + ' (' + confidencePercent + '%)', mirroredX, box.y - 8);
 
           } else {
+            // No face detected
             faceDetected = false;
-            totalFrames++;
             document.getElementById('warningOverlay').style.display = 'block';
             document.getElementById('emotionDisplay').textContent = '—';
-          }
-
-          // Update productivity score
-          if (totalFrames > 0) {
-            score = (faceFrames / totalFrames) * 100;
-            document.getElementById('scoreDisplay').textContent = score.toFixed(1) + '%';
+            document.getElementById('confidenceDisplay').textContent = 'No face detected';
+            lowConfidenceStreak++;
           }
 
         } catch (e) {
-          // If detection fails, continue loop
+          // Detection error, continue loop
         }
       }
 
-      // Run at ~10fps for performance (every 100ms)
-      setTimeout(() => requestAnimationFrame(detectLoop), 100);
+      // ~8-10 fps for smooth detection without overloading
+      setTimeout(() => requestAnimationFrame(detectLoop), 120);
     }
 
-    // ========== Mode Toggle ==========
+    // ========================================
+    // BEEP ALERT (mirrors C++ console BEEP)
+    // ========================================
+    function triggerBeep(emotion) {
+      // Console log (like C++ cout BEEP)
+      console.log('BEEP! Alert: You are ' + emotion + '!');
+
+      // Visual flash
+      const beep = document.getElementById('beepOverlay');
+      beep.textContent = '🔔 BEEP! You are ' + emotion + '!';
+      beep.style.display = 'block';
+      setTimeout(() => { beep.style.display = 'none'; }, 2000);
+
+      // Audio beep (simple oscillator)
+      try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.frequency.value = emotion === 'Sleepy' ? 440 : 660;
+        gain.gain.value = 0.3;
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.2);
+      } catch(e) {}
+    }
+
+    // ========================================
+    // MODE TOGGLE (mirrors C++ toggleMode)
+    // ========================================
     function toggleMode() {
       mode = mode === 'Relaxed' ? 'Strict' : 'Relaxed';
       document.getElementById('modeDisplay').textContent = mode;
+      console.log('Mode changed to: ' + mode);
       if (running && faceDetected) {
         const suggestions = mode === 'Strict' ? suggestionsStrict : suggestionsRelaxed;
-        document.getElementById('suggestionDisplay').textContent = suggestions[currentEmotion] || suggestions['Neutral'];
+        document.getElementById('suggestionDisplay').textContent = suggestions[currentEmotion];
       }
     }
 
-    // Keyboard shortcuts
+    // ========================================
+    // KEYBOARD SHORTCUTS (mirrors C++ waitKey)
+    // ========================================
     document.addEventListener('keydown', (e) => {
       if (e.key === 'q' || e.key === 'Q') stopCamera();
       if (e.key === 'm' || e.key === 'M') toggleMode();
