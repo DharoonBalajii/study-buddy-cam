@@ -546,7 +546,7 @@
       <p class="section-title">Live Web Demo</p>
       <div class="demo-container">
         <div class="demo-header">
-          <h3><span class="live-dot" id="liveDot"></span> Webcam Feed</h3>
+          <h3><span class="live-dot" id="liveDot"></span> Webcam Feed <span id="loadingStatus" style="font-size:0.75rem;color:var(--text-secondary);font-weight:normal;margin-left:8px;"></span></h3>
           <div class="demo-controls">
             <button class="btn btn-primary" id="btnStart" onclick="startCamera()">▶ Start Camera</button>
             <button class="btn" id="btnStop" onclick="stopCamera()" style="display:none;">⏹ Stop</button>
@@ -597,20 +597,49 @@
     </div>
   </div>
 
+  <!-- face-api.js for real face detection + expression recognition -->
+  <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+
   <script>
     // ========== State ==========
     let stream = null;
     let running = false;
     let mode = 'Relaxed';
     let score = 0;
-    let totalFrames = 0;
     let faceFrames = 0;
+    let totalFrames = 0;
+    let studySeconds = 0;        // only counts seconds when face is present
     let studyStartTime = null;
-    let emotionInterval = null;
     let timerInterval = null;
     let currentEmotion = 'Neutral';
+    let faceDetected = false;
+    let modelsLoaded = false;
 
-    const emotions = ['Happy', 'Sad', 'Angry', 'Neutral', 'Sleepy'];
+    // Map face-api expressions to our 5 emotions
+    function mapExpression(expressions) {
+      // expressions is an object like { happy: 0.9, sad: 0.01, angry: 0.02, ... }
+      const map = {
+        happy: 'Happy',
+        sad: 'Sad',
+        angry: 'Angry',
+        neutral: 'Neutral',
+        surprised: 'Happy',     // map surprised → Happy
+        fearful: 'Sad',         // map fearful → Sad
+        disgusted: 'Angry'      // map disgusted → Angry
+      };
+
+      // Find the expression with highest confidence
+      let maxExpr = 'neutral';
+      let maxVal = 0;
+      for (const [expr, val] of Object.entries(expressions)) {
+        if (val > maxVal) {
+          maxVal = val;
+          maxExpr = expr;
+        }
+      }
+
+      return map[maxExpr] || 'Neutral';
+    }
 
     const suggestionsRelaxed = {
       Happy: "Great mood! Keep studying, you're doing well! 😊",
@@ -628,8 +657,38 @@
       Sleepy: "Stand up! Splash water on your face and continue! 🚿"
     };
 
+    // ========== Load face-api models ==========
+    async function loadModels() {
+      const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/model/';
+      document.getElementById('loadingStatus').textContent = '(Loading AI models...)';
+
+      try {
+        await Promise.all([
+          faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+          faceapi.nets.faceExpressionNet.loadFromUri(MODEL_URL)
+        ]);
+        modelsLoaded = true;
+        document.getElementById('loadingStatus').textContent = '(Models ready ✓)';
+        setTimeout(() => {
+          document.getElementById('loadingStatus').textContent = '';
+        }, 2000);
+      } catch (err) {
+        document.getElementById('loadingStatus').textContent = '(Model load failed — using fallback)';
+        modelsLoaded = false;
+      }
+    }
+
     // ========== Camera ==========
     async function startCamera() {
+      const btn = document.getElementById('btnStart');
+      btn.textContent = '⏳ Loading...';
+      btn.disabled = true;
+
+      // Load models if not loaded yet
+      if (!modelsLoaded) {
+        await loadModels();
+      }
+
       try {
         stream = await navigator.mediaDevices.getUserMedia({
           video: { width: 640, height: 480, facingMode: 'user' }
@@ -638,31 +697,42 @@
         video.srcObject = stream;
         video.style.display = 'block';
         document.getElementById('placeholder').style.display = 'none';
-        document.getElementById('btnStart').style.display = 'none';
+        btn.style.display = 'none';
+        btn.textContent = '▶ Start Camera';
+        btn.disabled = false;
         document.getElementById('btnStop').style.display = 'inline-block';
         document.getElementById('liveDot').classList.add('active');
 
         running = true;
-        studyStartTime = Date.now();
+        studySeconds = 0;
         totalFrames = 0;
         faceFrames = 0;
         score = 0;
+        faceDetected = false;
 
-        // Start face detection loop
+        // Start detection loop once video metadata loads
         video.onloadedmetadata = () => {
           const canvas = document.getElementById('overlay');
           canvas.width = video.videoWidth;
           canvas.height = video.videoHeight;
-          detectFaces();
+          detectLoop();
         };
 
-        // Simulate emotion every 2 seconds
-        emotionInterval = setInterval(simulateEmotion, 2000);
-
-        // Update timer every second
-        timerInterval = setInterval(updateTimer, 1000);
+        // Timer: only increments studySeconds when face is detected
+        timerInterval = setInterval(() => {
+          if (!running) return;
+          if (faceDetected) {
+            studySeconds++;
+          }
+          const mins = Math.floor(studySeconds / 60);
+          const secs = studySeconds % 60;
+          document.getElementById('timeDisplay').textContent =
+            mins > 0 ? mins + 'm ' + secs + 's' : secs + 's';
+        }, 1000);
 
       } catch (err) {
+        btn.textContent = '▶ Start Camera';
+        btn.disabled = false;
         alert('Could not access webcam: ' + err.message);
       }
     }
@@ -673,7 +743,6 @@
         stream.getTracks().forEach(t => t.stop());
         stream = null;
       }
-      clearInterval(emotionInterval);
       clearInterval(timerInterval);
 
       const video = document.getElementById('webcam');
@@ -685,17 +754,13 @@
       document.getElementById('liveDot').classList.remove('active');
       document.getElementById('warningOverlay').style.display = 'none';
 
-      // Clear canvas
       const canvas = document.getElementById('overlay');
       const ctx = canvas.getContext('2d');
       ctx.clearRect(0, 0, canvas.width, canvas.height);
     }
 
-    // ========== Simple Face Detection (brightness-based simulation) ==========
-    let faceDetected = true;
-    let detectionFrame = 0;
-
-    function detectFaces() {
+    // ========== Main Detection Loop ==========
+    async function detectLoop() {
       if (!running) return;
 
       const video = document.getElementById('webcam');
@@ -704,112 +769,85 @@
 
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // Draw video frame to an offscreen canvas for analysis
-      const tempCanvas = document.createElement('canvas');
-      tempCanvas.width = video.videoWidth;
-      tempCanvas.height = video.videoHeight;
-      const tempCtx = tempCanvas.getContext('2d');
-      tempCtx.drawImage(video, 0, 0);
+      if (modelsLoaded && video.readyState >= 2) {
+        try {
+          // Detect face + expressions using face-api.js
+          const detections = await faceapi
+            .detectAllFaces(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.4 }))
+            .withFaceExpressions();
 
-      // Simple skin-tone detection in center region
-      const centerX = Math.floor(video.videoWidth * 0.25);
-      const centerY = Math.floor(video.videoHeight * 0.15);
-      const regionW = Math.floor(video.videoWidth * 0.5);
-      const regionH = Math.floor(video.videoHeight * 0.7);
+          totalFrames++;
 
-      try {
-        const imageData = tempCtx.getImageData(centerX, centerY, regionW, regionH);
-        const data = imageData.data;
-        let skinPixels = 0;
-        const totalPixels = data.length / 4;
-        const sampleStep = 8; // sample every 8th pixel for speed
+          if (detections.length > 0) {
+            faceDetected = true;
+            faceFrames++;
+            document.getElementById('warningOverlay').style.display = 'none';
 
-        for (let i = 0; i < data.length; i += 4 * sampleStep) {
-          const r = data[i], g = data[i+1], b = data[i+2];
-          // Simple skin color heuristic
-          if (r > 80 && g > 40 && b > 20 && r > g && r > b && 
-              Math.abs(r - g) > 15 && r - b > 15) {
-            skinPixels++;
+            // Get the largest face
+            const det = detections[0];
+            const box = det.detection.box;
+
+            // Mirror the x coordinate since video is flipped
+            const mirroredX = canvas.width - box.x - box.width;
+
+            // Draw green rectangle around detected face
+            ctx.strokeStyle = '#4ade80';
+            ctx.lineWidth = 3;
+            ctx.strokeRect(mirroredX, box.y, box.width, box.height);
+
+            // Get real emotion from expressions
+            const newEmotion = mapExpression(det.expressions);
+
+            if (newEmotion !== currentEmotion) {
+              currentEmotion = newEmotion;
+              document.getElementById('emotionDisplay').textContent = currentEmotion;
+
+              const suggestions = mode === 'Strict' ? suggestionsStrict : suggestionsRelaxed;
+              document.getElementById('suggestionDisplay').textContent = suggestions[currentEmotion] || suggestions['Neutral'];
+
+              // Add to emotion log
+              const log = document.getElementById('emotionLog');
+              const li = document.createElement('li');
+              li.textContent = new Date().toLocaleTimeString() + ' → ' + currentEmotion;
+              log.insertBefore(li, log.firstChild);
+              if (log.children.length > 20) log.removeChild(log.lastChild);
+            }
+
+            // Show emotion + confidence on canvas
+            const confidence = Math.round(det.expressions[Object.keys(det.expressions).reduce((a, b) => det.expressions[a] > det.expressions[b] ? a : b)] * 100);
+            ctx.fillStyle = '#fbbf24';
+            ctx.font = 'bold 16px JetBrains Mono, monospace';
+            ctx.fillText(currentEmotion + ' (' + confidence + '%)', mirroredX, box.y - 8);
+
+          } else {
+            faceDetected = false;
+            totalFrames++;
+            document.getElementById('warningOverlay').style.display = 'block';
+            document.getElementById('emotionDisplay').textContent = '—';
           }
+
+          // Update productivity score
+          if (totalFrames > 0) {
+            score = (faceFrames / totalFrames) * 100;
+            document.getElementById('scoreDisplay').textContent = score.toFixed(1) + '%';
+          }
+
+        } catch (e) {
+          // If detection fails, continue loop
         }
-
-        const skinRatio = skinPixels / (totalPixels / sampleStep);
-        faceDetected = skinRatio > 0.08;
-      } catch(e) {
-        faceDetected = true; // Fallback
       }
 
-      totalFrames++;
-
-      if (faceDetected) {
-        faceFrames++;
-        document.getElementById('warningOverlay').style.display = 'none';
-
-        // Draw face rectangle (simulated based on center region)
-        const drawX = canvas.width * 0.2;
-        const drawY = canvas.height * 0.1;
-        const drawW = canvas.width * 0.6;
-        const drawH = canvas.height * 0.75;
-
-        ctx.strokeStyle = '#4ade80';
-        ctx.lineWidth = 3;
-        ctx.strokeRect(drawX, drawY, drawW, drawH);
-
-        // Emotion label above rectangle
-        ctx.fillStyle = '#fbbf24';
-        ctx.font = 'bold 18px JetBrains Mono';
-        ctx.fillText('Emotion: ' + currentEmotion, drawX, drawY - 10);
-
-      } else {
-        document.getElementById('warningOverlay').style.display = 'block';
-      }
-
-      // Update score
-      if (totalFrames > 0) {
-        score = (faceFrames / totalFrames) * 100;
-        document.getElementById('scoreDisplay').textContent = score.toFixed(1) + '%';
-      }
-
-      requestAnimationFrame(detectFaces);
-    }
-
-    // ========== Emotion Simulation ==========
-    function simulateEmotion() {
-      if (!running || !faceDetected) return;
-
-      currentEmotion = emotions[Math.floor(Math.random() * emotions.length)];
-      document.getElementById('emotionDisplay').textContent = currentEmotion;
-
-      const suggestions = mode === 'Strict' ? suggestionsStrict : suggestionsRelaxed;
-      document.getElementById('suggestionDisplay').textContent = suggestions[currentEmotion];
-
-      // Add to log
-      const log = document.getElementById('emotionLog');
-      const li = document.createElement('li');
-      const now = new Date();
-      li.textContent = now.toLocaleTimeString() + ' → ' + currentEmotion;
-      log.insertBefore(li, log.firstChild);
-      if (log.children.length > 20) log.removeChild(log.lastChild);
-    }
-
-    // ========== Timer ==========
-    function updateTimer() {
-      if (!running || !studyStartTime) return;
-      const elapsed = Math.floor((Date.now() - studyStartTime) / 1000);
-      const mins = Math.floor(elapsed / 60);
-      const secs = elapsed % 60;
-      document.getElementById('timeDisplay').textContent = 
-        mins > 0 ? mins + 'm ' + secs + 's' : secs + 's';
+      // Run at ~10fps for performance (every 100ms)
+      setTimeout(() => requestAnimationFrame(detectLoop), 100);
     }
 
     // ========== Mode Toggle ==========
     function toggleMode() {
       mode = mode === 'Relaxed' ? 'Strict' : 'Relaxed';
       document.getElementById('modeDisplay').textContent = mode;
-      // Re-apply suggestion for current emotion
-      if (running) {
+      if (running && faceDetected) {
         const suggestions = mode === 'Strict' ? suggestionsStrict : suggestionsRelaxed;
-        document.getElementById('suggestionDisplay').textContent = suggestions[currentEmotion];
+        document.getElementById('suggestionDisplay').textContent = suggestions[currentEmotion] || suggestions['Neutral'];
       }
     }
 
