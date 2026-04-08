@@ -198,6 +198,73 @@
       </div>
     </div>
 
+    <!-- ===== SYSTEM ARCHITECTURE ===== -->
+    <div class="team-section">
+      <p class="section-title">System Architecture</p>
+      <div class="demo-box" style="padding:24px;">
+        <!-- Flow diagram using simple HTML/CSS -->
+        <div style="display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;margin-bottom:24px;">
+          <div style="background:var(--code);border:1px solid var(--border);padding:12px 18px;border-radius:10px;text-align:center;">
+            <div style="font-size:1.3rem;">📷</div>
+            <div style="font-size:.8rem;font-weight:600;margin-top:4px;">Webcam</div>
+            <div style="font-size:.65rem;color:var(--dim);">cv::VideoCapture</div>
+          </div>
+          <div style="color:var(--accent);font-size:1.3rem;">→</div>
+          <div style="background:var(--code);border:1px solid var(--border);padding:12px 18px;border-radius:10px;text-align:center;">
+            <div style="font-size:1.3rem;">🔍</div>
+            <div style="font-size:.8rem;font-weight:600;margin-top:4px;">Face Detect</div>
+            <div style="font-size:.65rem;color:var(--dim);">Haar Cascade</div>
+          </div>
+          <div style="color:var(--accent);font-size:1.3rem;">→</div>
+          <div style="background:var(--code);border:1px solid var(--border);padding:12px 18px;border-radius:10px;text-align:center;">
+            <div style="font-size:1.3rem;">😊</div>
+            <div style="font-size:.8rem;font-weight:600;margin-top:4px;">Emotion Sim</div>
+            <div style="font-size:.65rem;color:var(--dim);">Random Engine</div>
+          </div>
+          <div style="color:var(--accent);font-size:1.3rem;">→</div>
+          <div style="background:var(--code);border:1px solid var(--border);padding:12px 18px;border-radius:10px;text-align:center;">
+            <div style="font-size:1.3rem;">🧠</div>
+            <div style="font-size:.8rem;font-weight:600;margin-top:4px;">Decisions</div>
+            <div style="font-size:.65rem;color:var(--dim);">Study Tips</div>
+          </div>
+          <div style="color:var(--accent);font-size:1.3rem;">→</div>
+          <div style="background:var(--code);border:1px solid var(--border);padding:12px 18px;border-radius:10px;text-align:center;">
+            <div style="font-size:1.3rem;">📊</div>
+            <div style="font-size:.8rem;font-weight:600;margin-top:4px;">Tracker</div>
+            <div style="font-size:.65rem;color:var(--dim);">Score + Log</div>
+          </div>
+        </div>
+        <p style="color:var(--dim);font-size:.8rem;text-align:center;">The webcam captures frames → faces are detected using Haar Cascade → emotions are simulated → study suggestions are generated → productivity is tracked and logged.</p>
+      </div>
+    </div>
+
+    <!-- ===== PROJECT FILES ===== -->
+    <div class="team-section">
+      <p class="section-title">C++ Project Files</p>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;">
+        <div class="demo-box" style="padding:16px;">
+          <div style="font-family:'JetBrains Mono',monospace;font-size:.85rem;color:var(--accent);margin-bottom:6px;">main.cpp</div>
+          <p style="font-size:.8rem;color:var(--dim);">Entry point of the program. Opens webcam, runs the main loop, handles keyboard input (q to quit, m to toggle mode), and coordinates all other modules.</p>
+        </div>
+        <div class="demo-box" style="padding:16px;">
+          <div style="font-family:'JetBrains Mono',monospace;font-size:.85rem;color:var(--accent);margin-bottom:6px;">face_detection.h / .cpp</div>
+          <p style="font-size:.8rem;color:var(--dim);">FaceDetector class — loads the Haar Cascade XML file and uses it to find faces in each video frame. Draws green rectangles around detected faces.</p>
+        </div>
+        <div class="demo-box" style="padding:16px;">
+          <div style="font-family:'JetBrains Mono',monospace;font-size:.85rem;color:var(--accent);margin-bottom:6px;">emotion_simulator.h / .cpp</div>
+          <p style="font-size:.8rem;color:var(--dim);">EmotionSimulator class — uses rand() to pick a random emotion (Happy, Sad, Angry, Neutral, Sleepy) every ~2 seconds to simulate real detection.</p>
+        </div>
+        <div class="demo-box" style="padding:16px;">
+          <div style="font-family:'JetBrains Mono',monospace;font-size:.85rem;color:var(--accent);margin-bottom:6px;">decision_engine.h / .cpp</div>
+          <p style="font-size:.8rem;color:var(--dim);">DecisionEngine class — takes an emotion and returns a study suggestion. Supports Strict mode (strong warnings) and Relaxed mode (gentle tips).</p>
+        </div>
+        <div class="demo-box" style="padding:16px;">
+          <div style="font-family:'JetBrains Mono',monospace;font-size:.85rem;color:var(--accent);margin-bottom:6px;">productivity_tracker.h / .cpp</div>
+          <p style="font-size:.8rem;color:var(--dim);">ProductivityTracker class — tracks focused vs distracted count, calculates productivity score, manages the study timer, prints BEEP alerts, and logs emotions to log.txt.</p>
+        </div>
+      </div>
+    </div>
+
     <!-- ===== TEAM ===== -->
     <div class="team-section">
       <p class="section-title">Team Members</p>
@@ -205,27 +272,22 @@
         <div class="team-card">
           <div class="team-avatar">D</div>
           <div class="team-name">Dharoon Balajii</div>
-          <div class="team-role">Developer</div>
         </div>
         <div class="team-card">
           <div class="team-avatar">M</div>
           <div class="team-name">Mukillesh</div>
-          <div class="team-role">Developer</div>
         </div>
         <div class="team-card">
           <div class="team-avatar">K</div>
           <div class="team-name">Karthik</div>
-          <div class="team-role">Developer</div>
         </div>
         <div class="team-card">
           <div class="team-avatar">T</div>
           <div class="team-name">Tharakesh</div>
-          <div class="team-role">Developer</div>
         </div>
         <div class="team-card">
           <div class="team-avatar">J</div>
           <div class="team-name">Jaishwa</div>
-          <div class="team-role">Developer</div>
         </div>
       </div>
     </div>
