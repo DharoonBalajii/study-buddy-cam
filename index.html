@@ -379,11 +379,284 @@
       </ul>
     </div>
 
+    <!-- Live Demo -->
+    <div class="demo-section">
+      <p class="section-title">Live Web Demo</p>
+      <div class="demo-container">
+        <div class="demo-header">
+          <h3><span class="live-dot" id="liveDot"></span> Webcam Feed</h3>
+          <div class="demo-controls">
+            <button class="btn btn-primary" id="btnStart" onclick="startCamera()">▶ Start Camera</button>
+            <button class="btn" id="btnStop" onclick="stopCamera()" style="display:none;">⏹ Stop</button>
+            <button class="btn btn-mode" onclick="toggleMode()">⇄ Toggle Mode</button>
+          </div>
+        </div>
+        <div class="demo-body">
+          <div class="video-wrapper" id="videoWrapper">
+            <video id="webcam" autoplay playsinline muted></video>
+            <canvas id="overlay"></canvas>
+            <div class="video-placeholder" id="placeholder">
+              <div class="cam-icon">📷</div>
+              <p>Click <strong>Start Camera</strong> to begin</p>
+              <p style="font-size:0.8rem;margin-top:8px;">Your webcam feed stays in your browser — nothing is uploaded.</p>
+            </div>
+            <div class="warning-overlay" id="warningOverlay">⚠ WARNING: User not present!</div>
+          </div>
+          <div class="demo-sidebar">
+            <div class="stat-card">
+              <div class="stat-label">Detected Emotion</div>
+              <div class="stat-value emotion" id="emotionDisplay">—</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Productivity Score</div>
+              <div class="stat-value score" id="scoreDisplay">0.0%</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Study Time</div>
+              <div class="stat-value time" id="timeDisplay">0s</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Mode</div>
+              <div class="stat-value mode" id="modeDisplay">Relaxed</div>
+            </div>
+            <div class="suggestion-box">
+              <div class="stat-label">💡 Study Suggestion</div>
+              <div class="suggestion-text" id="suggestionDisplay">Start the camera to get tips!</div>
+              <ul class="emotion-log" id="emotionLog"></ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="footer">
-      ⚠️ This is a native C++ application — clone the repo and run locally with your webcam.<br/>
-      Built with C++ &bull; OpenCV &bull; Haar Cascade
+      Built with C++ &bull; OpenCV &bull; Haar Cascade &bull; Web demo powered by browser APIs<br/>
+      <span style="font-size:0.75rem;">Webcam feed is processed locally in your browser — no data leaves your device.</span>
     </div>
   </div>
+
+  <script>
+    // ========== State ==========
+    let stream = null;
+    let running = false;
+    let mode = 'Relaxed';
+    let score = 0;
+    let totalFrames = 0;
+    let faceFrames = 0;
+    let studyStartTime = null;
+    let emotionInterval = null;
+    let timerInterval = null;
+    let currentEmotion = 'Neutral';
+
+    const emotions = ['Happy', 'Sad', 'Angry', 'Neutral', 'Sleepy'];
+
+    const suggestionsRelaxed = {
+      Happy: "Great mood! Keep studying, you're doing well! 😊",
+      Sad: "Take a 5 minute break, listen to some music 🎵",
+      Angry: "Try a quick breathing exercise — inhale 4s, hold 4s, exhale 4s 🧘",
+      Neutral: "You're focused — keep going, you're on track! 📚",
+      Sleepy: "Time for a coffee break or a short walk ☕"
+    };
+
+    const suggestionsStrict = {
+      Happy: "Channel that energy — tackle the hardest topic now! 💪",
+      Sad: "Push through it! Only 10 more minutes then break 🔥",
+      Angry: "Use that intensity — power through practice problems! ⚡",
+      Neutral: "Stay locked in. No distractions allowed! 🎯",
+      Sleepy: "Stand up! Splash water on your face and continue! 🚿"
+    };
+
+    // ========== Camera ==========
+    async function startCamera() {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { width: 640, height: 480, facingMode: 'user' }
+        });
+        const video = document.getElementById('webcam');
+        video.srcObject = stream;
+        video.style.display = 'block';
+        document.getElementById('placeholder').style.display = 'none';
+        document.getElementById('btnStart').style.display = 'none';
+        document.getElementById('btnStop').style.display = 'inline-block';
+        document.getElementById('liveDot').classList.add('active');
+
+        running = true;
+        studyStartTime = Date.now();
+        totalFrames = 0;
+        faceFrames = 0;
+        score = 0;
+
+        // Start face detection loop
+        video.onloadedmetadata = () => {
+          const canvas = document.getElementById('overlay');
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          detectFaces();
+        };
+
+        // Simulate emotion every 2 seconds
+        emotionInterval = setInterval(simulateEmotion, 2000);
+
+        // Update timer every second
+        timerInterval = setInterval(updateTimer, 1000);
+
+      } catch (err) {
+        alert('Could not access webcam: ' + err.message);
+      }
+    }
+
+    function stopCamera() {
+      running = false;
+      if (stream) {
+        stream.getTracks().forEach(t => t.stop());
+        stream = null;
+      }
+      clearInterval(emotionInterval);
+      clearInterval(timerInterval);
+
+      const video = document.getElementById('webcam');
+      video.srcObject = null;
+      video.style.display = 'none';
+      document.getElementById('placeholder').style.display = 'block';
+      document.getElementById('btnStart').style.display = 'inline-block';
+      document.getElementById('btnStop').style.display = 'none';
+      document.getElementById('liveDot').classList.remove('active');
+      document.getElementById('warningOverlay').style.display = 'none';
+
+      // Clear canvas
+      const canvas = document.getElementById('overlay');
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+
+    // ========== Simple Face Detection (brightness-based simulation) ==========
+    let faceDetected = true;
+    let detectionFrame = 0;
+
+    function detectFaces() {
+      if (!running) return;
+
+      const video = document.getElementById('webcam');
+      const canvas = document.getElementById('overlay');
+      const ctx = canvas.getContext('2d');
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Draw video frame to an offscreen canvas for analysis
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = video.videoWidth;
+      tempCanvas.height = video.videoHeight;
+      const tempCtx = tempCanvas.getContext('2d');
+      tempCtx.drawImage(video, 0, 0);
+
+      // Simple skin-tone detection in center region
+      const centerX = Math.floor(video.videoWidth * 0.25);
+      const centerY = Math.floor(video.videoHeight * 0.15);
+      const regionW = Math.floor(video.videoWidth * 0.5);
+      const regionH = Math.floor(video.videoHeight * 0.7);
+
+      try {
+        const imageData = tempCtx.getImageData(centerX, centerY, regionW, regionH);
+        const data = imageData.data;
+        let skinPixels = 0;
+        const totalPixels = data.length / 4;
+        const sampleStep = 8; // sample every 8th pixel for speed
+
+        for (let i = 0; i < data.length; i += 4 * sampleStep) {
+          const r = data[i], g = data[i+1], b = data[i+2];
+          // Simple skin color heuristic
+          if (r > 80 && g > 40 && b > 20 && r > g && r > b && 
+              Math.abs(r - g) > 15 && r - b > 15) {
+            skinPixels++;
+          }
+        }
+
+        const skinRatio = skinPixels / (totalPixels / sampleStep);
+        faceDetected = skinRatio > 0.08;
+      } catch(e) {
+        faceDetected = true; // Fallback
+      }
+
+      totalFrames++;
+
+      if (faceDetected) {
+        faceFrames++;
+        document.getElementById('warningOverlay').style.display = 'none';
+
+        // Draw face rectangle (simulated based on center region)
+        const drawX = canvas.width * 0.2;
+        const drawY = canvas.height * 0.1;
+        const drawW = canvas.width * 0.6;
+        const drawH = canvas.height * 0.75;
+
+        ctx.strokeStyle = '#4ade80';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(drawX, drawY, drawW, drawH);
+
+        // Emotion label above rectangle
+        ctx.fillStyle = '#fbbf24';
+        ctx.font = 'bold 18px JetBrains Mono';
+        ctx.fillText('Emotion: ' + currentEmotion, drawX, drawY - 10);
+
+      } else {
+        document.getElementById('warningOverlay').style.display = 'block';
+      }
+
+      // Update score
+      if (totalFrames > 0) {
+        score = (faceFrames / totalFrames) * 100;
+        document.getElementById('scoreDisplay').textContent = score.toFixed(1) + '%';
+      }
+
+      requestAnimationFrame(detectFaces);
+    }
+
+    // ========== Emotion Simulation ==========
+    function simulateEmotion() {
+      if (!running || !faceDetected) return;
+
+      currentEmotion = emotions[Math.floor(Math.random() * emotions.length)];
+      document.getElementById('emotionDisplay').textContent = currentEmotion;
+
+      const suggestions = mode === 'Strict' ? suggestionsStrict : suggestionsRelaxed;
+      document.getElementById('suggestionDisplay').textContent = suggestions[currentEmotion];
+
+      // Add to log
+      const log = document.getElementById('emotionLog');
+      const li = document.createElement('li');
+      const now = new Date();
+      li.textContent = now.toLocaleTimeString() + ' → ' + currentEmotion;
+      log.insertBefore(li, log.firstChild);
+      if (log.children.length > 20) log.removeChild(log.lastChild);
+    }
+
+    // ========== Timer ==========
+    function updateTimer() {
+      if (!running || !studyStartTime) return;
+      const elapsed = Math.floor((Date.now() - studyStartTime) / 1000);
+      const mins = Math.floor(elapsed / 60);
+      const secs = elapsed % 60;
+      document.getElementById('timeDisplay').textContent = 
+        mins > 0 ? mins + 'm ' + secs + 's' : secs + 's';
+    }
+
+    // ========== Mode Toggle ==========
+    function toggleMode() {
+      mode = mode === 'Relaxed' ? 'Strict' : 'Relaxed';
+      document.getElementById('modeDisplay').textContent = mode;
+      // Re-apply suggestion for current emotion
+      if (running) {
+        const suggestions = mode === 'Strict' ? suggestionsStrict : suggestionsRelaxed;
+        document.getElementById('suggestionDisplay').textContent = suggestions[currentEmotion];
+      }
+    }
+
+    // Keyboard shortcuts
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'q' || e.key === 'Q') stopCamera();
+      if (e.key === 'm' || e.key === 'M') toggleMode();
+    });
+  </script>
 
 </body>
 </html>
