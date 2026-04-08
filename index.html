@@ -544,12 +544,20 @@
     /* ==========================================
        SONG RECOMMENDATION
        ========================================== */
+    var songTimer = null;
+
     function recommendSong(emotion) {
       if (emotion !== 'Sad' && emotion !== 'Angry') {
-        document.getElementById('songBox').style.display = 'none';
-        document.getElementById('songPopup').style.display = 'none';
+        // Don't hide if timer is still active (10s window)
+        if (!songTimer) {
+          document.getElementById('songBox').style.display = 'none';
+          document.getElementById('songPopup').style.display = 'none';
+        }
         return;
       }
+
+      // If already showing a song, don't change it until timer expires
+      if (songTimer) return;
 
       var lang = document.getElementById('langSelect').value;
       var list = songs[lang];
@@ -564,6 +572,13 @@
       document.getElementById('songPopupName').textContent = pick.name;
       document.getElementById('songPopupLink').href = pick.url;
       document.getElementById('songPopup').style.display = 'block';
+
+      // Keep visible for 10 seconds
+      songTimer = setTimeout(function() {
+        songTimer = null;
+        document.getElementById('songBox').style.display = 'none';
+        document.getElementById('songPopup').style.display = 'none';
+      }, 10000);
     }
 
     /* ==========================================
