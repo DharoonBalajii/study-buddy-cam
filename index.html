@@ -3,69 +3,387 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Emotion-Based Study Assistant</title>
+  <title>Emotion-Based Study Assistant | C++ OpenCV Project</title>
+  <meta name="description" content="A C++ project using OpenCV and Haar Cascade for real-time face detection with emotion-based study suggestions." />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <style>
+    :root {
+      --bg-primary: #0a0e17;
+      --bg-card: #111827;
+      --bg-code: #1e293b;
+      --border: #1e293b;
+      --text-primary: #e2e8f0;
+      --text-secondary: #94a3b8;
+      --accent: #38bdf8;
+      --accent-glow: rgba(56, 189, 248, 0.15);
+      --green: #4ade80;
+      --orange: #fb923c;
+      --red: #f87171;
+      --purple: #a78bfa;
+    }
+
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Courier New', monospace; background: #0d1117; color: #c9d1d9; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
-    .container { max-width: 720px; padding: 40px; }
-    h1 { color: #58a6ff; font-size: 1.8rem; margin-bottom: 8px; }
-    h2 { color: #8b949e; font-size: 1rem; font-weight: normal; margin-bottom: 32px; }
-    .section { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 20px; margin-bottom: 16px; }
-    .section h3 { color: #58a6ff; margin-bottom: 12px; font-size: 0.95rem; }
-    code { background: #1f2937; padding: 2px 6px; border-radius: 4px; font-size: 0.85rem; color: #f0883e; }
-    pre { background: #1f2937; padding: 12px; border-radius: 6px; overflow-x: auto; margin-top: 8px; font-size: 0.8rem; color: #7ee787; }
-    ul { list-style: none; padding: 0; }
-    ul li { padding: 4px 0; }
-    ul li::before { content: "→ "; color: #58a6ff; }
-    .badge { display: inline-block; background: #238636; color: #fff; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; margin-left: 8px; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+      line-height: 1.6;
+    }
+
+    /* Hero */
+    .hero {
+      text-align: center;
+      padding: 80px 24px 48px;
+      background: radial-gradient(ellipse at 50% 0%, var(--accent-glow) 0%, transparent 60%);
+    }
+    .hero-badge {
+      display: inline-block;
+      background: var(--bg-code);
+      border: 1px solid var(--border);
+      color: var(--accent);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      padding: 4px 14px;
+      border-radius: 20px;
+      margin-bottom: 20px;
+      letter-spacing: 0.5px;
+    }
+    .hero h1 {
+      font-size: clamp(2rem, 5vw, 3.2rem);
+      font-weight: 700;
+      margin-bottom: 12px;
+      background: linear-gradient(135deg, var(--accent), var(--purple));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .hero p {
+      color: var(--text-secondary);
+      max-width: 560px;
+      margin: 0 auto 32px;
+      font-size: 1.05rem;
+    }
+    .hero-tags {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .tag {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      padding: 6px 16px;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* Layout */
+    .container { max-width: 900px; margin: 0 auto; padding: 0 24px 80px; }
+
+    /* Section */
+    .section-title {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      color: var(--accent);
+      margin: 48px 0 20px;
+      font-weight: 600;
+    }
+
+    /* Cards */
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 12px;
+      transition: border-color 0.2s;
+    }
+    .card:hover { border-color: #334155; }
+    .card h3 {
+      font-size: 1rem;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .card h3 .icon { font-size: 1.2rem; }
+    .card p, .card li { color: var(--text-secondary); font-size: 0.9rem; }
+
+    /* File grid */
+    .file-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 12px;
+    }
+    .file-item {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+      transition: border-color 0.2s, transform 0.2s;
+    }
+    .file-item:hover { border-color: var(--accent); transform: translateY(-2px); }
+    .file-name {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.85rem;
+      color: var(--accent);
+      margin-bottom: 4px;
+    }
+    .file-desc { font-size: 0.8rem; color: var(--text-secondary); }
+
+    /* Code block */
+    .code-block {
+      background: var(--bg-code);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.8rem;
+      color: var(--green);
+      overflow-x: auto;
+      line-height: 1.8;
+      position: relative;
+    }
+    .code-block .comment { color: var(--text-secondary); }
+    .code-block .cmd { color: var(--orange); }
+
+    /* Steps */
+    .steps { counter-reset: step; list-style: none; padding: 0; }
+    .steps li {
+      counter-increment: step;
+      padding: 12px 0 12px 48px;
+      position: relative;
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+      border-left: 1px solid var(--border);
+      margin-left: 16px;
+    }
+    .steps li::before {
+      content: counter(step);
+      position: absolute;
+      left: -13px;
+      top: 12px;
+      width: 26px;
+      height: 26px;
+      background: var(--bg-primary);
+      border: 2px solid var(--accent);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: var(--accent);
+    }
+    .steps li:last-child { border-left-color: transparent; }
+    .steps code {
+      background: var(--bg-code);
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.8rem;
+      color: var(--orange);
+    }
+
+    /* Controls */
+    .controls-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .control-key {
+      display: inline-block;
+      background: var(--bg-code);
+      border: 1px solid #334155;
+      padding: 4px 12px;
+      border-radius: 6px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.9rem;
+      color: var(--accent);
+      margin-right: 8px;
+      min-width: 32px;
+      text-align: center;
+    }
+
+    /* Features */
+    .feature-list { list-style: none; padding: 0; }
+    .feature-list li {
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+    }
+    .feature-list li:last-child { border-bottom: none; }
+    .feature-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .dot-blue { background: var(--accent); }
+    .dot-green { background: var(--green); }
+    .dot-orange { background: var(--orange); }
+    .dot-purple { background: var(--purple); }
+    .dot-red { background: var(--red); }
+
+    /* Architecture */
+    .arch-flow {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      padding: 24px 0;
+    }
+    .arch-box {
+      background: var(--bg-code);
+      border: 1px solid var(--border);
+      padding: 10px 18px;
+      border-radius: 8px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      color: var(--text-primary);
+      text-align: center;
+    }
+    .arch-arrow { color: var(--accent); font-size: 1.2rem; }
+
+    /* Footer */
+    .footer {
+      text-align: center;
+      padding: 32px 24px;
+      color: var(--text-secondary);
+      font-size: 0.8rem;
+      border-top: 1px solid var(--border);
+      margin-top: 48px;
+    }
+
+    @media (max-width: 600px) {
+      .controls-grid { grid-template-columns: 1fr; }
+      .arch-flow { flex-direction: column; }
+      .arch-arrow { transform: rotate(90deg); }
+    }
   </style>
 </head>
 <body>
+
+  <section class="hero">
+    <div class="hero-badge">C++ &bull; OpenCV &bull; Haar Cascade</div>
+    <h1>Emotion-Based Study Assistant</h1>
+    <p>A native C++ application that uses your webcam to detect faces and provide real-time emotion-based study suggestions with productivity tracking.</p>
+    <div class="hero-tags">
+      <span class="tag">Face Detection</span>
+      <span class="tag">OOP Design</span>
+      <span class="tag">Real-time Processing</span>
+      <span class="tag">Productivity Tracking</span>
+    </div>
+  </section>
+
   <div class="container">
-    <h1>🎓 Emotion-Based Study Assistant</h1>
-    <h2>C++ &amp; OpenCV Project — Runs locally on your laptop webcam</h2>
 
-    <div class="section">
-      <h3>📁 Project Files</h3>
-      <ul>
-        <li><code>main.cpp</code> — Main program loop</li>
-        <li><code>face_detection.h/.cpp</code> — Haar Cascade face detection</li>
-        <li><code>emotion_simulator.h/.cpp</code> — Random emotion simulation</li>
-        <li><code>decision_engine.h/.cpp</code> — Study suggestions + modes</li>
-        <li><code>productivity_tracker.h/.cpp</code> — Score, timer, logging</li>
+    <!-- Architecture -->
+    <p class="section-title">System Architecture</p>
+    <div class="card">
+      <div class="arch-flow">
+        <div class="arch-box">📷 Webcam<br/><small style="color:var(--text-secondary)">cv::VideoCapture</small></div>
+        <span class="arch-arrow">→</span>
+        <div class="arch-box">🔍 Face Detect<br/><small style="color:var(--text-secondary)">Haar Cascade</small></div>
+        <span class="arch-arrow">→</span>
+        <div class="arch-box">😊 Emotion Sim<br/><small style="color:var(--text-secondary)">Random Engine</small></div>
+        <span class="arch-arrow">→</span>
+        <div class="arch-box">🧠 Decisions<br/><small style="color:var(--text-secondary)">Study Tips</small></div>
+        <span class="arch-arrow">→</span>
+        <div class="arch-box">📊 Tracker<br/><small style="color:var(--text-secondary)">Score + Log</small></div>
+      </div>
+    </div>
+
+    <!-- Project Files -->
+    <p class="section-title">Project Files</p>
+    <div class="file-grid">
+      <div class="file-item">
+        <div class="file-name">main.cpp</div>
+        <div class="file-desc">Entry point — webcam loop, keyboard controls, display overlay</div>
+      </div>
+      <div class="file-item">
+        <div class="file-name">face_detection.h / .cpp</div>
+        <div class="file-desc">FaceDetector class — loads Haar Cascade, detects & draws faces</div>
+      </div>
+      <div class="file-item">
+        <div class="file-name">emotion_simulator.h / .cpp</div>
+        <div class="file-desc">EmotionSimulator class — generates random emotions every ~2s</div>
+      </div>
+      <div class="file-item">
+        <div class="file-name">decision_engine.h / .cpp</div>
+        <div class="file-desc">DecisionEngine class — study tips + Strict/Relaxed mode toggle</div>
+      </div>
+      <div class="file-item">
+        <div class="file-name">productivity_tracker.h / .cpp</div>
+        <div class="file-desc">ProductivityTracker class — score, timer, log.txt output</div>
+      </div>
+      <div class="file-item">
+        <div class="file-name">README_SETUP.txt</div>
+        <div class="file-desc">Full setup guide for Windows, Mac & Linux</div>
+      </div>
+    </div>
+
+    <!-- Setup -->
+    <p class="section-title">Quick Start</p>
+    <div class="card">
+      <ol class="steps">
+        <li>Clone the repository to your machine</li>
+        <li>Install OpenCV — <code>brew install opencv</code> (Mac) or <code>sudo apt install libopencv-dev</code> (Linux)</li>
+        <li>Copy <code>haarcascade_frontalface_default.xml</code> into the project folder</li>
+        <li>Compile all source files together</li>
+        <li>Run the executable — <code>./app</code></li>
+      </ol>
+    </div>
+
+    <!-- Compile -->
+    <p class="section-title">Compile & Run</p>
+    <div class="code-block">
+      <span class="comment"># Compile all source files</span><br/>
+      <span class="cmd">g++</span> main.cpp face_detection.cpp emotion_simulator.cpp decision_engine.cpp productivity_tracker.cpp -o app `pkg-config --cflags --libs opencv4`<br/><br/>
+      <span class="comment"># Run the program</span><br/>
+      <span class="cmd">./app</span>
+    </div>
+
+    <!-- Controls -->
+    <p class="section-title">Keyboard Controls</p>
+    <div class="controls-grid">
+      <div class="card">
+        <h3><span class="control-key">Q</span> Quit</h3>
+        <p>Stop the program and print session summary to terminal</p>
+      </div>
+      <div class="card">
+        <h3><span class="control-key">M</span> Mode</h3>
+        <p>Toggle between Strict and Relaxed study mode</p>
+      </div>
+    </div>
+
+    <!-- Features -->
+    <p class="section-title">Features</p>
+    <div class="card">
+      <ul class="feature-list">
+        <li><span class="feature-dot dot-blue"></span>Real-time webcam face detection with green rectangle overlay</li>
+        <li><span class="feature-dot dot-green"></span>Simulated emotions: Happy, Sad, Angry, Neutral, Sleepy</li>
+        <li><span class="feature-dot dot-orange"></span>Context-aware study suggestions based on detected emotion</li>
+        <li><span class="feature-dot dot-purple"></span>Productivity score tracking with OOP design patterns</li>
+        <li><span class="feature-dot dot-red"></span>Auto study timer with session logging to log.txt</li>
       </ul>
     </div>
 
-    <div class="section">
-      <h3>⚡ How to Run</h3>
-      <p>1. Clone this repo to your laptop</p>
-      <p>2. Install OpenCV (<code>brew install opencv</code> / <code>sudo apt install libopencv-dev</code>)</p>
-      <p>3. Copy <code>haarcascade_frontalface_default.xml</code> into the folder</p>
-      <p>4. Compile &amp; run:</p>
-      <pre>g++ main.cpp face_detection.cpp emotion_simulator.cpp decision_engine.cpp productivity_tracker.cpp -o app `pkg-config --cflags --libs opencv4`
-./app</pre>
+    <div class="footer">
+      ⚠️ This is a native C++ application — clone the repo and run locally with your webcam.<br/>
+      Built with C++ &bull; OpenCV &bull; Haar Cascade
     </div>
-
-    <div class="section">
-      <h3>🎮 Controls</h3>
-      <ul>
-        <li><code>q</code> — Quit &amp; show session summary</li>
-        <li><code>m</code> — Toggle Strict / Relaxed mode</li>
-      </ul>
-    </div>
-
-    <div class="section">
-      <h3>✨ Features</h3>
-      <ul>
-        <li>Webcam face detection with rectangle overlay</li>
-        <li>Simulated emotions: Happy, Sad, Angry, Neutral, Sleepy</li>
-        <li>Productivity score <span class="badge">OOP</span></li>
-        <li>Auto study timer + log.txt logging</li>
-        <li>Console BEEP alerts + session summary</li>
-      </ul>
-    </div>
-
-    <p style="margin-top:24px;color:#8b949e;font-size:0.85rem;">⚠️ This is a native C++ application. Download the repo and run it locally with your webcam.</p>
   </div>
+
 </body>
 </html>
