@@ -535,22 +535,25 @@
        SONG RECOMMENDATION
        ========================================== */
     function recommendSong(emotion) {
-      // Only recommend for Sad or Angry, max once every 15 seconds
       if (emotion !== 'Sad' && emotion !== 'Angry') {
         document.getElementById('songBox').style.display = 'none';
+        document.getElementById('songPopup').style.display = 'none';
         return;
       }
-      var now = Date.now();
-      if (now - lastSongTime < 15000) return;
-      lastSongTime = now;
 
       var lang = document.getElementById('langSelect').value;
       var list = songs[lang];
       var pick = list[Math.floor(Math.random() * list.length)];
 
+      // Update in-video overlay
       document.getElementById('songName').textContent = pick.name;
       document.getElementById('songLink').href = pick.url;
       document.getElementById('songBox').style.display = 'block';
+
+      // Update popup below video (always visible)
+      document.getElementById('songPopupName').textContent = pick.name;
+      document.getElementById('songPopupLink').href = pick.url;
+      document.getElementById('songPopup').style.display = 'block';
     }
 
     /* ==========================================
